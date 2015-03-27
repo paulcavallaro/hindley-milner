@@ -1,0 +1,5 @@
+[package]
+
+name = "hindley-milner"
+version = "0.0.1"
+authors = ["Paul Cavallaro <paulcavallaro@gmail.com>"]
