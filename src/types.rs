@@ -33,6 +33,21 @@ pub enum Expr {
   Plus (Box<Expr>, Box<Expr>),
   Print (Box<Expr>),
   App (Func_, Vec<Expr>),
+  Let (String, Box<Expr>, Box<Expr>),
+}
+
+pub struct TypeVar {
+  name : String
+}
+
+pub enum MonoType {
+  Variable (TypeVar),
+  App (Vec<Box<MonoType>>),
+}
+
+pub enum PolyType {
+  Mono (MonoType),
+  Quantifier (TypeVar, Box<PolyType>)
 }
 
 impl fmt::Display for Value {
