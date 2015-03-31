@@ -12,4 +12,9 @@ fn main() {
   let f = Expr::Val(Value::Str("Hello, World!".to_string()));
   let g = eval(Expr::Print(Box::new(f)));
   let _h = eval(Expr::Print(Box::new(Expr::Val(g))));
+
+  let a = Expr::Val(Value::Int64(64));
+  let f = Expr::Val(Value::Str("Hello, World!".to_string()));
+  let i = eval(Expr::Plus(Box::new(a), Box::new(f)));
+  let _ = eval(Expr::Print(Box::new(Expr::Val(i))));
 }

@@ -1,3 +1,7 @@
+extern crate core;
+
+use self::core::fmt;
+
 pub enum Value {
   Int64 (i64),
   Str (String),
@@ -11,6 +15,24 @@ pub enum Expr {
   Print (Box<Expr>),
 }
 
+impl fmt::Display for Value {
+  fn fmt(&self, formatter : &mut fmt::Formatter) -> fmt::Result {
+    match self {
+      &Value::Int64(i) => {
+        i.fmt(formatter)
+      },
+      &Value::Str(ref str) => {
+        str.fmt(formatter)
+      },
+      &Value::Unit =>
+      {
+        write!(formatter, "()");
+        Ok(())
+      }
+    }
+  }
+}
+
 pub fn eval(expr : Expr) -> Value {
   match expr {
     Expr::Val(v) => v,
@@ -20,7 +42,10 @@ pub fn eval(expr : Expr) -> Value {
       let r2 = eval(*e2);
       match (r1, r2) {
         (Value::Int64(i1), Value::Int64(i2)) => Value::Int64(i1+i2),
-        _ => panic!("Trying to add two non integers")
+        (l, r) =>
+        {
+          panic!("Trying to add non integer operand in expression '{} + {}'", l, r)
+        }
       }
     },
     Expr::Print(e) =>
