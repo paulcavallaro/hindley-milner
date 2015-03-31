@@ -1,7 +1,7 @@
 use std::fmt;
 use std::collections::HashMap;
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Debug)]
 pub enum Value {
   Int64 (i64),
   Str (String),
@@ -14,14 +14,18 @@ pub struct Context {
   pub vars : HashMap<String, Expr>,
 }
 
-#[derive(Clone)]
+pub fn mk_ctx() -> Context {
+  Context { vars : HashMap::new() }
+}
+
+#[derive(Clone, PartialEq, Debug)]
 pub struct Func_ {
   pub name : String,
   pub params : Vec<String>,
   pub body : Box<Expr>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Debug)]
 pub enum Expr {
   Val (Value),
   Var (String),

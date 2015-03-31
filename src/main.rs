@@ -1,12 +1,11 @@
 mod types;
 mod interp;
 
-use types::{Value, Expr, Context, Func_};
+use types::{Value, Expr, Func_, mk_ctx};
 use interp::eval;
-use std::collections::HashMap;
 
 fn main() {
-  let ctx = Context { vars : HashMap::new() };
+  let ctx = mk_ctx();
   let a = Expr::Val(Value::Int64(64));
   let b = Expr::Val(Value::Int64(65));
   let c = Expr::Print(Box::new(Expr::Plus(Box::new(a), Box::new(b))));
