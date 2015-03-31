@@ -1,6 +1,8 @@
 mod types;
+mod interp;
 
-use types::{Value, Expr, Context, Func_, eval};
+use types::{Value, Expr, Context, Func_};
+use interp::eval;
 use std::collections::HashMap;
 
 fn main() {
