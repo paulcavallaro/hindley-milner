@@ -19,6 +19,24 @@ pub fn mk_ctx() -> Context {
 }
 
 #[derive(Clone, PartialEq, Debug)]
+pub struct TypingContext {
+  /* Variables (in expressions) to types */
+  pub vars : HashMap<Ident, Type>,
+  /* TypeVars to actual types */
+  pub tyvars : HashMap<Ident, Type>,
+  /* Equivalent TypeVars during Unification */
+  pub subst : HashMap<Ident, Ident>,
+}
+
+pub fn new_type_ctx() -> TypingContext {
+  TypingContext {
+    vars : HashMap::new(),
+    tyvars : HashMap::new(),
+    subst : HashMap::new(),
+  }
+}
+
+#[derive(Clone, PartialEq, Debug)]
 pub struct Func_ {
   pub name : String,
   pub params : Vec<String>,
@@ -28,26 +46,32 @@ pub struct Func_ {
 #[derive(Clone, PartialEq, Debug)]
 pub enum Expr {
   Val (Value),
-  Var (String),
+  Var (Ident),
   // Builtins
   Plus (Box<Expr>, Box<Expr>),
   Print (Box<Expr>),
-  App (Func_, Vec<Expr>),
+  Lambda (Ident, Box<Expr>),
+  App (Box<Expr>, Vec<Expr>),
   Let (String, Box<Expr>, Box<Expr>),
 }
 
-pub struct TypeVar {
-  name : String
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub struct Ident(pub usize);
+
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub enum PrimType {
+  Int64,
+  Str,
 }
 
-pub enum MonoType {
-  Variable (TypeVar),
-  App (Vec<Box<MonoType>>),
-}
-
-pub enum PolyType {
-  Mono (MonoType),
-  Quantifier (TypeVar, Box<PolyType>)
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub enum Type {
+  TAny,
+  TPrim (PrimType),
+  TVar (Ident),
+  TFun (Box<Type>, Box<Type>),
+  TQuant (Ident, Box<Type>),
+  TUnit,
 }
 
 impl fmt::Display for Value {

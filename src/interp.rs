@@ -5,10 +5,13 @@ pub fn eval(ctx : &Context, expr : Expr) -> Value {
     Expr::Val(v) => v,
     Expr::Var(ref id) =>
     {
+      panic!("Not Implemented")
+/*
       match ctx.vars.get(id) {
         None => panic!("Unbound name {}", id),
         Some(e) => eval(ctx, e.clone()),
       }
+*/
     },
     Expr::Plus(e1, e2) =>
     {
@@ -28,8 +31,14 @@ pub fn eval(ctx : &Context, expr : Expr) -> Value {
       println!("{}", res);
       Value::Unit
     },
+    Expr::Lambda(_, _) =>
+    {
+      panic!("Not Implemented");
+    }
     Expr::App(f, args) =>
     {
+      panic!("Not Implemented");
+/*
       let mut new_ctx = ctx.clone();
       if f.params.len() != args.len() {
         panic!("Partial application of function {} of arity {} to {} args",
@@ -39,6 +48,7 @@ pub fn eval(ctx : &Context, expr : Expr) -> Value {
         new_ctx.vars.insert(param.clone(), arg.clone());
       }
       eval(&new_ctx, *f.body)
+*/
     },
     Expr::Let(id, val, body) =>
     {
@@ -49,6 +59,7 @@ pub fn eval(ctx : &Context, expr : Expr) -> Value {
   }
 }
 
+/*
 #[test]
 fn addition() {
   use types::mk_ctx;
@@ -78,3 +89,4 @@ fn let_var() {
   let ctx = mk_ctx();
   assert_eq!(eval(&ctx, let_expr), Value::Int64(10));
 }
+*/
