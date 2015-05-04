@@ -139,3 +139,13 @@ var1
 x : 10
 var1 : forall x. x -> x
 var1 : forall y. y -> y
+
+
+
+
+let f x =
+  let g y = x in
+  f (g x)
+
+g : [x : t] forall a. t
+f : forall x. x

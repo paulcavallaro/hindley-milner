@@ -1,7 +1,7 @@
-use types::{Value, Expr, Context, TypingContext, PrimType, Ident, Type};
+use types::{Value, Expr, TypingContext, PrimType, Ident, Type};
 
 use std::sync::atomic::{AtomicUsize, Ordering, ATOMIC_USIZE_INIT};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 static IDENT_CNTR : AtomicUsize = ATOMIC_USIZE_INIT;
 
 pub fn new_ident() -> Ident {
@@ -18,22 +18,20 @@ pub fn val(val : &Value) -> Type {
   match *val {
     Value::Int64(_) => Type::TPrim(PrimType::Int64),
     Value::Str(_) => Type::TPrim(PrimType::Str),
-    Value::Func(_) => panic!("Func type bad"),
     Value::Unit => Type::TUnit,
   }
 }
 
 /// Creates a new fresh Type from ty replacing all quantifiers with fresh
 /// type variables
-fn fresh(ctx : &mut TypingContext,
+fn fresh(ctx : &TypingContext,
          to_replace : &mut HashMap<Ident, Ident>,
          ty : &Type) -> Type {
   match *ty {
     Type::TQuant(ref tyvar, ref ty_expr) =>
     {
       to_replace.insert(tyvar.clone(), fresh_tyvar());
-      let ty_expr = fresh(ctx, to_replace, &*ty_expr);
-      Type::TQuant(tyvar.clone(), Box::new(ty_expr))
+      fresh(ctx, to_replace, &*ty_expr)
     },
     Type::TVar(ref id) =>
     {
@@ -65,6 +63,7 @@ pub fn var(ctx : &mut TypingContext, id : &Ident) -> Type {
       ty.clone()
     },
   };
+  // TODO(ptc) is this right?
   fresh(ctx, &mut HashMap::new(), &ty)
 }
 
@@ -85,11 +84,32 @@ fn let_lambda() {
           Box::new(Expr::Var(arg_id.clone())))])));
   let mut ty_ctx = new_type_ctx();
   let ty = expr(&mut ty_ctx, let_lambda);
-  let ety = fully_expand_type(&mut ty_ctx, &ty);
+  let ety = fully_expand_type(&mut ty_ctx, &mut HashSet::new(), &ty);
   println!("{:?}", ty);
   println!("{:?}", ety);
   assert_eq!(ety, Type::TFun(Box::new(Type::TPrim(PrimType::Int64)),
                              Box::new(Type::TPrim(PrimType::Int64))));
+}
+
+#[test]
+fn forall_id() {
+  use types::{Value, Expr, new_type_ctx};
+  let arg_id = new_ident();
+  let id = Expr::Lambda(arg_id.clone(),
+                                Box::new(Expr::Var(arg_id.clone())));
+  let mut ty_ctx = new_type_ctx();
+  let ty = expr(&mut ty_ctx, id);
+  let ety = fully_expand_type(&mut ty_ctx, &mut HashSet::new(), &ty);
+  println!("{:?}", ty);
+  println!("{:?}", ety);
+  match ety {
+    Type::TQuant(id, ty) =>
+    {
+      assert_eq!(*ty, Type::TFun(Box::new(Type::TVar(id.clone())),
+                                 Box::new(Type::TVar(id.clone()))));
+    },
+    _ => assert!(false, "Identity function should be forall x.x"),
+  }
 }
 
 fn add_type(ctx : &mut TypingContext, v : Ident, ty : Type) -> () {
@@ -110,7 +130,7 @@ fn add_subst(ctx : &mut TypingContext, x1 : Ident, x2 : Ident) -> () {
 }
 
 fn get_tyvar(ctx : &mut TypingContext, x : Ident) -> Ident {
-  let mut x_prime = x.clone();
+  let mut x_prime;
   match ctx.subst.get(&x) {
     None => return x.clone(),
     Some(id) =>
@@ -123,6 +143,14 @@ fn get_tyvar(ctx : &mut TypingContext, x : Ident) -> Ident {
   x_prime
 }
 
+fn get_type(ctx : &mut TypingContext, v : Ident) -> Option<Type> {
+  let v = get_tyvar(ctx, v);
+  match ctx.tyvars.get(&v) {
+    None => None,
+    Some(ty) => Some(ty.clone()),
+  }
+}
+
 fn get_type_unsafe(ctx : &mut TypingContext, v : &Ident) -> Type {
   match ctx.tyvars.get(v) {
     None => Type::TAny,
@@ -130,28 +158,36 @@ fn get_type_unsafe(ctx : &mut TypingContext, v : &Ident) -> Type {
   }
 }
 
-fn fully_expand_type(ctx : &mut TypingContext, ty : &Type) -> Type {
+pub fn fully_expand_type(ctx : &mut TypingContext,
+                         quant : &mut HashSet<Ident>,
+                         ty : &Type) -> Type {
   match *ty {
     Type::TVar(ref id) =>
     {
-      expand_type(ctx, ty)
+      if !quant.contains(&id) {
+        expand_type(ctx, ty)
+      } else {
+        ty.clone()
+      }
     },
     Type::TFun(ref arg_ty, ref res_ty) =>
     {
-      let arg_ty = fully_expand_type(ctx, arg_ty);
-      let res_ty = fully_expand_type(ctx, res_ty);
+      let arg_ty = fully_expand_type(ctx, quant, arg_ty);
+      let res_ty = fully_expand_type(ctx, quant, res_ty);
       Type::TFun(Box::new(arg_ty), Box::new(res_ty))
     },
+    Type::TQuant(ref quant_id, ref quant_ty) =>
+    {
+      quant.insert(quant_id.clone());
+      let quant_ty = fully_expand_type(ctx, quant, quant_ty);
+      Type::TQuant(quant_id.clone(), Box::new(quant_ty))
+    }
     Type::TPrim(_)
-    | Type::TUnit =>
+    | Type::TUnit
+    | Type::TAny =>
     {
       ty.clone()
-    }
-    _ =>
-    {
-      // TODO(ptc) implement
-      panic!("unimplemented!")
-    }
+    },
   }
 }
 
@@ -159,8 +195,6 @@ fn expand_type(ctx : &mut TypingContext, ty : &Type) -> Type {
   match *ty {
     Type::TVar(ref id) =>
     {
-      // TODO(ptc) this recurses infinitely with unify_
-      // Need to return a non type var at some point
       let x = get_tyvar(ctx, id.clone());
       match ctx.tyvars.get(&x) {
         None => Type::TAny,
@@ -176,9 +210,7 @@ pub fn expr(ctx : &mut TypingContext, expr : Expr) -> Type {
 }
 
 fn expr_(ctx : &mut TypingContext, expr : Expr) -> Type {
-  println!("==expr_==\nctx: {:?}\nexpr: {:?}", ctx, expr);
-  let tmp =
-    match expr {
+  match expr {
     Expr::Val(v) =>
     {
       val(&v)
@@ -195,7 +227,7 @@ fn expr_(ctx : &mut TypingContext, expr : Expr) -> Type {
       unify_(ctx, &ty2, &Type::TPrim(PrimType::Int64));
       Type::TPrim(PrimType::Int64)
     },
-    Expr::Print(e) =>
+    Expr::Print(_) =>
     {
       Type::TUnit
     },
@@ -204,22 +236,37 @@ fn expr_(ctx : &mut TypingContext, expr : Expr) -> Type {
       let tyvar = fresh_tyvar();
       ctx.vars.insert(arg.clone(), Type::TVar(tyvar.clone()));
       let body_ty = expr_(ctx, *body);
-      let arg_ty = match ctx.vars.get(&arg) {
-        None => panic!("Did not have key"),
-        Some(v) => v,
-      };
-      Type::TFun(Box::new(arg_ty.clone()), Box::new(body_ty))
+      match get_type(ctx, tyvar.clone()) {
+        None =>
+        {
+          // The argument type is unconstrained, so quantify the function
+          // over the type variable
+          Type::TQuant(tyvar.clone(),
+                       Box::new(Type::TFun(Box::new(Type::TVar(tyvar)),
+                                           Box::new(body_ty))))
+        },
+        Some(v) =>
+        {
+          // The argument type is used in a constrained way
+          Type::TFun(Box::new(v), Box::new(body_ty))
+        },
+      }
     },
     Expr::App(f, args) =>
     {
       let fun_ty = expr_(ctx, *f);
-      match fun_ty {
-        Type::TFun(_,_) => (),
-        _ => {
-          panic!("Trying to use function application with non function")
-        },
-      };
       // TODO(ptc) fix multiple arity functions
+      let fun_ty = match fun_ty {
+        Type::TFun(_,_) =>
+        {
+          fun_ty
+        },
+        Type::TQuant(_,_) =>
+        {
+          fresh(ctx, &mut HashMap::new(), &fun_ty)
+        },
+        _ => panic!("Trying to use function application with non function"),
+      };
       let arg = args[0].clone();
       let arg_ty = expr_(ctx, arg);
       let tyvar = fresh_tyvar();
@@ -228,13 +275,11 @@ fn expr_(ctx : &mut TypingContext, expr : Expr) -> Type {
       unify_(ctx, &fun_ty, &tyvar_fun_ty);
       expand_type(ctx, &Type::TVar(tyvar))
     },
-    Expr::Let(id, val, body) =>
+    Expr::Let(_id, _val, _body) =>
     {
       Type::TUnit
     },
-  };
-  println!("==expr_ RESULT==\nctx: {:?}\nty: {:?}", ctx, tmp);
-  tmp
+  }
 }
 
 fn unify_var(ctx : &mut TypingContext, id1 : Ident, id2 : Ident) -> Type {
@@ -258,11 +303,10 @@ fn unify_var(ctx : &mut TypingContext, id1 : Ident, id2 : Ident) -> Type {
 
 fn unify_(ctx : &mut TypingContext, ty1 : &Type, ty2 : &Type) -> Type {
   // TODO(ptc) remove cloning here
-  println!("== unifying ==\nctx: {:?}\nty1: {:?}\nty2: {:?}", ctx, ty1, ty2);
   if ty1 == ty2 {
     return ty1.clone()
   }
-  let tmp = match (ty1.clone(), ty2.clone()) {
+  match (ty1.clone(), ty2.clone()) {
     (Type::TAny, ty)
     | (ty, Type::TAny) => ty,
     (Type::TVar(ref id1), Type::TVar(ref id2)) =>
@@ -298,22 +342,16 @@ fn unify_(ctx : &mut TypingContext, ty1 : &Type, ty2 : &Type) -> Type {
       let res_ty = expand_type(ctx, &res_ty);
       Type::TFun(Box::new(arg_ty), Box::new(res_ty))
     },
-    (Type::TQuant(id1, quant_ty1), Type::TQuant(id2, quant_ty2)) =>
+    (Type::TQuant(_id1, _quant_ty1), Type::TQuant(_id2, _quant_ty2)) =>
     {
-      // TODO(ptc)
+      // TODO(ptc) maybe enough if fresh(quant_ty1) unfies with fresh(quant_ty2)
+      // should only affect the free type variables in quant_ty1 and quant_ty2
       Type::TUnit
     },
-    (Type::TQuant(id1, quant_ty1), _) =>
-    {
-      // TODO(ptc)
-      Type::TUnit
-    }
     // TODO(ptc)
     _ =>
     {
       panic!("Does not unify")
     }
-  };
-  println!("== unifying RESULT ==\nctx: {:?}\n ty: {:?}", ctx, tmp);
-  tmp
+  }
 }

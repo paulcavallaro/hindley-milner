@@ -5,17 +5,7 @@ use std::collections::HashMap;
 pub enum Value {
   Int64 (i64),
   Str (String),
-  Func (Func_),
   Unit,
-}
-
-#[derive(Clone)]
-pub struct Context {
-  pub vars : HashMap<String, Expr>,
-}
-
-pub fn mk_ctx() -> Context {
-  Context { vars : HashMap::new() }
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -34,13 +24,6 @@ pub fn new_type_ctx() -> TypingContext {
     tyvars : HashMap::new(),
     subst : HashMap::new(),
   }
-}
-
-#[derive(Clone, PartialEq, Debug)]
-pub struct Func_ {
-  pub name : String,
-  pub params : Vec<String>,
-  pub body : Box<Expr>,
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -82,9 +65,6 @@ impl fmt::Display for Value {
       },
       &Value::Str(ref str) => {
         str.fmt(formatter)
-      },
-      &Value::Func(ref f) => {
-        write!(formatter, "Function {} of arity {}", f.name, f.params.len())
       },
       &Value::Unit =>
       {
