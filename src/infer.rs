@@ -28,9 +28,9 @@ fn fresh(ctx : &TypingContext,
          to_replace : &mut HashMap<Ident, Ident>,
          ty : &Type) -> Type {
   match *ty {
-    Type::TQuant(ref tyvar, ref ty_expr) =>
+    Type::TQuant(tyvar, ref ty_expr) =>
     {
-      to_replace.insert(tyvar.clone(), fresh_tyvar());
+      to_replace.insert(tyvar, fresh_tyvar());
       fresh(ctx, to_replace, &*ty_expr)
     },
     Type::TVar(ref id) =>
@@ -73,15 +73,15 @@ fn let_lambda() {
   let arg_id = new_ident();
   let arg_id2 = new_ident();
   let let_lambda = Expr::Lambda(
-    arg_id.clone(),
+    arg_id,
     Box::new(
       Expr::App(
         Box::new(
-          Expr::Lambda(arg_id2.clone(),
-                       Box::new(Expr::Var(arg_id.clone())))),
+          Expr::Lambda(arg_id2,
+                       Box::new(Expr::Var(arg_id)))),
         vec![Expr::Plus(
           Box::new(Expr::Val(Value::Int64(1))),
-          Box::new(Expr::Var(arg_id.clone())))])));
+          Box::new(Expr::Var(arg_id)))])));
   let mut ty_ctx = new_type_ctx();
   let ty = expr(&mut ty_ctx, let_lambda);
   let ety = fully_expand_type(&mut ty_ctx, &mut HashSet::new(), &ty);
@@ -95,8 +95,8 @@ fn let_lambda() {
 fn forall_id() {
   use types::{Value, Expr, new_type_ctx};
   let arg_id = new_ident();
-  let id = Expr::Lambda(arg_id.clone(),
-                                Box::new(Expr::Var(arg_id.clone())));
+  let id = Expr::Lambda(arg_id,
+                                Box::new(Expr::Var(arg_id)));
   let mut ty_ctx = new_type_ctx();
   let ty = expr(&mut ty_ctx, id);
   let ety = fully_expand_type(&mut ty_ctx, &mut HashSet::new(), &ty);
@@ -105,8 +105,8 @@ fn forall_id() {
   match ety {
     Type::TQuant(id, ty) =>
     {
-      assert_eq!(*ty, Type::TFun(Box::new(Type::TVar(id.clone())),
-                                 Box::new(Type::TVar(id.clone()))));
+      assert_eq!(*ty, Type::TFun(Box::new(Type::TVar(id)),
+                                 Box::new(Type::TVar(id))));
     },
     _ => assert!(false, "Identity function should be forall x.x"),
   }
@@ -132,14 +132,14 @@ fn add_subst(ctx : &mut TypingContext, x1 : Ident, x2 : Ident) -> () {
 fn get_tyvar(ctx : &mut TypingContext, x : Ident) -> Ident {
   let mut x_prime;
   match ctx.subst.get(&x) {
-    None => return x.clone(),
+    None => return x,
     Some(id) =>
     {
-      x_prime = id.clone()
+      x_prime = *id
     },
   }
-  x_prime = get_tyvar(ctx, x_prime.clone());
-  add_subst(ctx, x, x_prime.clone());
+  x_prime = get_tyvar(ctx, x_prime);
+  add_subst(ctx, x, x_prime);
   x_prime
 }
 
@@ -176,11 +176,11 @@ pub fn fully_expand_type(ctx : &mut TypingContext,
       let res_ty = fully_expand_type(ctx, quant, res_ty);
       Type::TFun(Box::new(arg_ty), Box::new(res_ty))
     },
-    Type::TQuant(ref quant_id, ref quant_ty) =>
+    Type::TQuant(quant_id, ref quant_ty) =>
     {
-      quant.insert(quant_id.clone());
+      quant.insert(quant_id);
       let quant_ty = fully_expand_type(ctx, quant, quant_ty);
-      Type::TQuant(quant_id.clone(), Box::new(quant_ty))
+      Type::TQuant(quant_id, Box::new(quant_ty))
     }
     Type::TPrim(_)
     | Type::TUnit
@@ -193,9 +193,9 @@ pub fn fully_expand_type(ctx : &mut TypingContext,
 
 fn expand_type(ctx : &mut TypingContext, ty : &Type) -> Type {
   match *ty {
-    Type::TVar(ref id) =>
+    Type::TVar(id) =>
     {
-      let x = get_tyvar(ctx, id.clone());
+      let x = get_tyvar(ctx, id);
       match ctx.tyvars.get(&x) {
         None => Type::TAny,
         Some(ty) => ty.clone()
@@ -234,14 +234,14 @@ fn expr_(ctx : &mut TypingContext, expr : Expr) -> Type {
     Expr::Lambda(arg, body) =>
     {
       let tyvar = fresh_tyvar();
-      ctx.vars.insert(arg.clone(), Type::TVar(tyvar.clone()));
+      ctx.vars.insert(arg, Type::TVar(tyvar));
       let body_ty = expr_(ctx, *body);
-      match get_type(ctx, tyvar.clone()) {
+      match get_type(ctx, tyvar) {
         None =>
         {
           // The argument type is unconstrained, so quantify the function
           // over the type variable
-          Type::TQuant(tyvar.clone(),
+          Type::TQuant(tyvar,
                        Box::new(Type::TFun(Box::new(Type::TVar(tyvar)),
                                            Box::new(body_ty))))
         },
@@ -271,7 +271,7 @@ fn expr_(ctx : &mut TypingContext, expr : Expr) -> Type {
       let arg_ty = expr_(ctx, arg);
       let tyvar = fresh_tyvar();
       let tyvar_fun_ty = Type::TFun(Box::new(arg_ty),
-                                    Box::new(Type::TVar(tyvar.clone())));
+                                    Box::new(Type::TVar(tyvar)));
       unify_(ctx, &fun_ty, &tyvar_fun_ty);
       expand_type(ctx, &Type::TVar(tyvar))
     },
@@ -291,13 +291,13 @@ fn unify_var(ctx : &mut TypingContext, id1 : Ident, id2 : Ident) -> Type {
   let ty1 = get_type_unsafe(ctx, &id1);
   let ty2 = get_type_unsafe(ctx, &id2);
   let fresh_id = fresh_tyvar();
-  rename(ctx, id1, fresh_id.clone());
-  rename(ctx, id2, fresh_id.clone());
+  rename(ctx, id1, fresh_id);
+  rename(ctx, id2, fresh_id);
   let ty = unify_(ctx, &ty1, &ty2);
   // TODO(ptc) something to do with recursive types?
   let ty_prime = expand_type(ctx, &ty);
   let ty = unify_(ctx, &ty, &ty_prime);
-  add_type(ctx, fresh_id.clone(), ty);
+  add_type(ctx, fresh_id, ty);
   Type::TVar(fresh_id)
 }
 
@@ -309,12 +309,12 @@ fn unify_(ctx : &mut TypingContext, ty1 : &Type, ty2 : &Type) -> Type {
   match (ty1.clone(), ty2.clone()) {
     (Type::TAny, ty)
     | (ty, Type::TAny) => ty,
-    (Type::TVar(ref id1), Type::TVar(ref id2)) =>
+    (Type::TVar(id1), Type::TVar(id2)) =>
     {
-      unify_var(ctx, id1.clone(), id2.clone())
+      unify_var(ctx, id1, id2)
     },
-    (Type::TVar(ref id), ref other_ty)
-    | (ref other_ty, Type::TVar(ref id)) =>
+    (Type::TVar(id), ref other_ty)
+    | (ref other_ty, Type::TVar(id)) =>
     {
       // Get what the type var is currently bound to (ety)
       // Rename the typevar id to a fresh typevar (id')
@@ -327,11 +327,11 @@ fn unify_(ctx : &mut TypingContext, ty1 : &Type, ty2 : &Type) -> Type {
       // just ty? Is it because as we do futher unifications we
       // need to be able to possible expand out the type of ty'?
       // That seems reasonable/possible with polymorphic, multi-arity functions
-      let ety = expand_type(ctx, &Type::TVar(id.clone()));
+      let ety = expand_type(ctx, &Type::TVar(id));
       let fresh_id = fresh_tyvar();
-      rename(ctx, id.clone(), fresh_id.clone());
+      rename(ctx, id, fresh_id);
       let ty = unify_(ctx, &ety, other_ty);
-      add_type(ctx, id.clone(), ty);
+      add_type(ctx, id, ty);
       Type::TVar(fresh_id)
     },
     (Type::TFun(ref arg_ty1, ref res_ty1), Type::TFun(ref arg_ty2, ref res_ty2)) =>

@@ -38,7 +38,7 @@ pub enum Expr {
   Let (String, Box<Expr>, Box<Expr>),
 }
 
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub struct Ident(pub usize);
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
