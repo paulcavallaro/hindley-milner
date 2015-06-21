@@ -1,11 +1,17 @@
 mod types;
 mod infer;
+mod parsing;
+mod utils;
 
 use types::{Value, Expr, new_type_ctx};
 use infer::{expr, new_ident, fully_expand_type};
 use std::collections::{HashSet};
+use std::env::{args};
+use std::path::{Path};
+use parsing::parser::{lex_file};
+use parsing::ast::{Token};
 
-fn main() {
+fn example() {
 /*
 f x =
   let y = 5 + x in
@@ -41,4 +47,19 @@ f x =
   let ety = fully_expand_type(&mut ty_ctx, &mut HashSet::new(), &ty);
   println!("ty: {:?}", ty);
   println!("ety: {:?}", ety);
+}
+
+fn main() {
+  example();
+  let args : Vec<_> = args().collect();
+  if args.len() < 2 {
+    panic!("Expected filename to parse");
+  }
+  let ref filename = args[1];
+  let path = Path::new(filename);
+  let mut lexer = lex_file(path).unwrap();
+  while lexer.state.peek_tok != Token::Eof {
+    lexer.advance_token();
+    println!("{:?}", lexer.state.peek_tok);
+  }
 }
